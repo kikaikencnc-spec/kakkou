@@ -302,6 +302,10 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
 .thumb-dialog { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--surface); color: var(--fg); max-width: min(92vw, 420px); }
 .thumb-dialog::backdrop { background: rgba(0, 0, 0, .5); }
 .thumb-dialog img { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto 8px; background: #fff; border-radius: 8px; image-rendering: auto; }
+/* 加工済みは下にまとめる */
+.done-divider { display: flex; align-items: baseline; gap: 10px; margin-top: 12px; padding: 8px 4px 4px; border-top: 2px solid var(--done); color: var(--done); font-weight: 700; font-size: 15px; }
+.done-divider .n { font: 600 13px var(--mono); color: var(--muted); }
+.group.done-group .g-head { opacity: .85; }
 /* 部品を登録した人 */
 .p-by { font-size: 12px; color: var(--muted); }
 
@@ -860,7 +864,7 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-09 12:28:36";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-11 13:52:21";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -2044,14 +2048,29 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
       var ma = A.slice(2).join("|"), mb = B.slice(2).join("|");
       return (nearest[a] || "9999-12-31").localeCompare(nearest[b] || "9999-12-31") || procOrder(A[0]) - procOrder(B[0]) || cmpMid(A[1], B[1]) || (ma === NO_MAT) - (mb === NO_MAT) || ma.localeCompare(mb, "ja");
     });
+    /* 未加工の区画を上に、加工済みの部品は下にまとめる（「すべて」のときは「加工済み」の見出しの下に区画ごとに並べる） */
     var shown = 0;
-    keys.forEach(function (k) {
+    var passes = view === "todo" ? ["todo"] : view === "done" ? ["done"] : ["todo", "done"];
+    var latestDone = {};
+    keys.forEach(function (k) { latestDone[k] = Math.max.apply(null, [0].concat(byG[k].filter(function (p) { return p.status === "done"; }).map(function (p) { return p.doneAt || 0; }))); });
+    passes.forEach(function (mode) {
+      /* 加工済みの区画は、最近加工済みにした部品がある順 */
+      var order = mode === "done" ? keys.slice().sort(function (a, b) { return latestDone[b] - latestDone[a]; }) : keys;
+      var cards = order.map(function (k) { return groupCard(k, mode); }).filter(Boolean);
+      if (!cards.length) return;
+      if (mode === "done" && passes.length > 1) {
+        var nDone = scoped.filter(function (p) { return p.status === "done"; });
+        root.appendChild(h("div", { class: "done-divider" }, h("span", null, "加工済み"), h("span", { class: "n" }, nDone.length + "点 / " + sumQty(nDone) + "個")));
+      }
+      cards.forEach(function (c) { root.appendChild(c); });
+      shown += cards.length;
+    });
+    function groupCard(k, mode) {
       var items = byG[k], kp = k.split("|"), proc = procInfo(kp[0]), mat = kp.slice(2).join("|"), p0 = items[0], form = formOf(p0);
       var gt = items.filter(function (p) { return p.status !== "done"; }).sort(function (a, b) { return dueKey(a).localeCompare(dueKey(b)) || (a.createdAt || 0) - (b.createdAt || 0); });
       var gd = items.filter(function (p) { return p.status === "done"; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); });
-      var showT = view !== "done" && gt.length, showD = view !== "todo" && gd.length;
-      if (!showT && !showD) return;
-      shown++;
+      var showT = mode === "todo" && gt.length, showD = mode === "done" && gd.length;
+      if (!showT && !showD) return null;
       var nSel = gt.filter(function (p) { return sel.has(p.id); }).length;
       var head = h("div", { class: "g-head" },
         h("span", { class: "proc-pill" + (proc.id === "none" ? " none" : "") }, proc.label),
@@ -2062,14 +2081,14 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
         h("div", { class: "g-meta" },
           h("span", { class: "pill todo" }, "未加工 " + gt.length + "点/" + sumQty(gt) + "個"),
           h("span", { class: "pill done" }, "加工済み " + gd.length + "点/" + sumQty(gd) + "個"),
-          nearest[k] ? h("span", { class: "due " + urgency(nearest[k]) }, "最短 " + dueText(nearest[k])) : null));
+          showT && nearest[k] ? h("span", { class: "due " + urgency(nearest[k]) }, "最短 " + dueText(nearest[k])) : null));
       if (showT) {
         var gid = "gpick-" + k.replace(/[^\w.-]/g, "_");
         head.appendChild(h("label", { class: "g-pick", for: gid },
           h("input", { type: "checkbox", id: gid, checked: nSel === gt.length, indeterminate: nSel > 0 && nSel < gt.length, onchange: function (e) { toggleGroup(gt, e.target.checked); } }),
           nSel ? nSel + "/" + gt.length + " 選択中" : "未加工をすべて選択"));
       }
-      var g = h("section", { class: "group" + (nearest[k] ? " urg-" + urgency(nearest[k]) : ""), "aria-label": proc.label + " " + stockLabel(p0) + " " + mat }, head);
+      var g = h("section", { class: "group" + (showD ? " done-group" : "") + (showT && nearest[k] ? " urg-" + urgency(nearest[k]) : ""), "aria-label": proc.label + " " + stockLabel(p0) + " " + mat + (showD ? " 加工済み" : "") }, head);
       if (showT) {
         g.appendChild(h("div", { class: "sub todo" }, h("span", null, "未加工"), h("span", null, gt.length + "点")));
         g.appendChild(h("ul", { class: "parts" }, gt.map(partRow)));
@@ -2078,8 +2097,8 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
         g.appendChild(h("div", { class: "sub done" }, h("span", null, "加工済み"), h("span", null, gd.length + "点")));
         g.appendChild(h("ul", { class: "parts" }, gd.map(partRow)));
       }
-      root.appendChild(g);
-    });
+      return g;
+    }
     if (!shown) {
       root.appendChild(h("div", { class: "empty" },
         h("strong", null, view === "todo" ? "未加工の部品はありません" : view === "done" ? "加工済みの部品はまだありません" : "この条件に合う部品はありません"),
