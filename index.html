@@ -864,7 +864,7 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-11 17:20:02";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-11 18:39:05";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -1365,7 +1365,8 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
     return runOp([p.id], status === "done"
       ? { run: n + "を加工済みにしています…", done: n + "を加工済みにしました", fail: n + "を加工済みにできませんでした" }
       : { run: n + "を未加工に戻しています…", done: n + "を未加工に戻しました", fail: n + "を未加工に戻せませんでした" },
-      [function () { return call("api_setStatus", token, [p.id], status, me); }]);
+      [function () { return call("api_setStatus", token, [p.id], status, me); }])
+      .then(function () { if (status === "done") scheduleAssignNotify(); }); /* 加工済みの Slack 通知を10秒後に送ってもらう */
   }
   /* 削除は画面下に「削除しています…」を出し、失敗したらやり直せるようにする */
   function remove(p, j) {
@@ -1550,14 +1551,29 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
     clearTimeout(assignNotifyTimer);
     assignNotifyTimer = setTimeout(function () { assignNotifyTimer = null; call("api_flushAssignNotices", token, me).catch(function () {}); }, ASSIGN_NOTIFY_MS);
   }
-  /* 10秒たつ前にページを閉じたら、閉じるときに送ってもらう（届かなくても5分ごとの処理が送る） */
-  window.addEventListener("pagehide", function () {
-    if (!assignNotifyTimer || !API_URL) return;
-    clearTimeout(assignNotifyTimer); assignNotifyTimer = null;
+  /* 部品の追加の Slack 通知: 追加がすべて終わってから20秒たったら、まとめてすぐ送ってもらう（続けて追加した分は1通に）。
+     addPending は「まだ送ってもらっていない追加がある」印。追加の処理が続いているあいだは待つ */
+  var ADD_NOTIFY_MS = 20000, addNotifyTimer = null, addPending = false;
+  function holdAddNotify() {
+    if (addNotifyTimer) { clearTimeout(addNotifyTimer); addNotifyTimer = null; addPending = true; }
+  }
+  function scheduleAddNotify() {
+    if (!addPending) return;
+    addPending = false;
+    clearTimeout(addNotifyTimer);
+    addNotifyTimer = setTimeout(function () { addNotifyTimer = null; call("api_flushAddNotices", token, me).catch(function () {}); }, ADD_NOTIFY_MS);
+  }
+  /* 待っているうちにページを閉じたら、閉じるときに送ってもらう（届かなくても5分ごとの処理が送る） */
+  function beacon(fn) {
     try {
-      fetch(API_URL, { method: "POST", body: JSON.stringify({ fn: "api_flushAssignNotices", args: [token, me] }),
+      fetch(API_URL, { method: "POST", body: JSON.stringify({ fn: fn, args: [token, me] }),
         headers: { "Content-Type": "text/plain;charset=utf-8" }, credentials: "omit", keepalive: true }).catch(function () {});
     } catch (e) {}
+  }
+  window.addEventListener("pagehide", function () {
+    if (!API_URL) return;
+    if (assignNotifyTimer) { clearTimeout(assignNotifyTimer); assignNotifyTimer = null; beacon("api_flushAssignNotices"); }
+    if (addNotifyTimer || addPending) { clearTimeout(addNotifyTimer); addNotifyTimer = null; addPending = false; beacon("api_flushAddNotices"); }
   });
   function assign(p, value) {
     var n = "「" + p.name + "」";
@@ -1623,7 +1639,7 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
     marking = true; updateBar();
     runOp(ids, { run: list.length + "点を加工済みにしています…", done: list.length + "点を加工済みにしました", fail: "加工済みにできなかった部品があります" },
       inChunks(ids, STATUS_CHUNK, function (c) { return call("api_setStatus", token, c, "done", me); }))
-      .then(function () { marking = false; render(); });
+      .then(function () { marking = false; render(); scheduleAssignNotify(); });
   }
   function updateBar() {
     var list = gate ? [] : selectedParts();
@@ -2201,7 +2217,8 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
   function pump() {
     if (jobRunning) return;
     var j = jobs.filter(function (x) { return x.state === "wait"; })[0];
-    if (!j) return;
+    if (!j) { scheduleAddNotify(); return; } /* 追加がすべて終わった: 20秒後に通知を送ってもらう */
+    holdAddNotify(); /* まだ続けて追加している: 通知は待つ */
     jobRunning = true;
     runJob(j).then(function () { jobRunning = false; pump(); });
   }
@@ -2214,7 +2231,7 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
     var step = Promise.resolve();
     if (!j.partId) {
       setJob(j, "run", "「" + name + "」を追加しています…");
-      step = call("api_addPart", token, j.part, me).then(function (id) { j.partId = id; return refresh(); });
+      step = call("api_addPart", token, j.part, me).then(function (id) { j.partId = id; addPending = true; return refresh(); });
     }
     return step.then(function () {
       var list = j.files, failed = [];
