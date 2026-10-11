@@ -864,7 +864,7 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-11 13:52:21";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-11 17:20:02";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -1544,12 +1544,28 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
       .then(function () { zipping = false; zipLabel = ""; updateBar(); });
   }
   /* ---------- 担当者（誰がやるか） ---------- */
+  /* 担当の Slack 通知: 最後に「担当する」を押してから10秒たったら、まとめてすぐ送ってもらう（続けて担当した分は1通に） */
+  var ASSIGN_NOTIFY_MS = 10000, assignNotifyTimer = null;
+  function scheduleAssignNotify() {
+    clearTimeout(assignNotifyTimer);
+    assignNotifyTimer = setTimeout(function () { assignNotifyTimer = null; call("api_flushAssignNotices", token, me).catch(function () {}); }, ASSIGN_NOTIFY_MS);
+  }
+  /* 10秒たつ前にページを閉じたら、閉じるときに送ってもらう（届かなくても5分ごとの処理が送る） */
+  window.addEventListener("pagehide", function () {
+    if (!assignNotifyTimer || !API_URL) return;
+    clearTimeout(assignNotifyTimer); assignNotifyTimer = null;
+    try {
+      fetch(API_URL, { method: "POST", body: JSON.stringify({ fn: "api_flushAssignNotices", args: [token, me] }),
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, credentials: "omit", keepalive: true }).catch(function () {});
+    } catch (e) {}
+  });
   function assign(p, value) {
     var n = "「" + p.name + "」";
     var labels = !value ? { run: n + "の担当をやめています…", done: n + "の担当をやめました", fail: n + "の担当をやめられませんでした" }
       : p.assignee && p.assignee !== me ? { run: n + "の担当を代わっています…", done: n + "の担当を代わりました", fail: n + "の担当を代われませんでした" }
       : { run: n + "の担当に立候補しています…", done: n + "の担当になりました", fail: n + "の担当になれませんでした" };
-    runOp([p.id], labels, [function () { return call("api_setAssignee", token, [p.id], value, me); }]);
+    runOp([p.id], labels, [function () { return call("api_setAssignee", token, [p.id], value, me); }])
+      .then(function () { scheduleAssignNotify(); }); /* ついた・代わった・外れた、どれも知らせる */
   }
   function assignSelected() {
     if (marking) return;
@@ -1559,7 +1575,7 @@ header h1 .h1-sub { font-size: 13px; font-weight: 500; color: var(--muted); marg
     marking = true; updateBar();
     runOp(ids, { run: list.length + "点の担当に立候補しています…", done: list.length + "点の担当になりました", fail: "担当になれなかった部品があります" },
       inChunks(ids, 50, function (c) { return call("api_setAssignee", token, c, me, me); }))
-      .then(function () { marking = false; render(); });
+      .then(function () { marking = false; render(); scheduleAssignNotify(); });
   }
   function setProcess(p, value) {
     var n = "「" + p.name + "」", to = procInfo(value).label;
