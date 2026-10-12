@@ -191,7 +191,6 @@ body:not(.booting) .booting-only { display: none; }
 .proc-tabs { align-self: flex-start; max-width: 100%; overflow-x: auto; }
 .proc-pill { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 6px; background: var(--fg); color: var(--bg); white-space: nowrap; }
 .proc-pill.none { background: transparent; color: var(--muted); border: 1px dashed var(--line-strong); }
-.p-proc select { font-size: 12px; padding: 1px 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); max-width: 100%; }
 /* 部品の追加: ① ファイル → ② 加工の種類 → ③ 内容 の順に進める */
 form.add { display: flex; flex-direction: column; gap: 18px; }
 .step { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -316,6 +315,15 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 .group.done-group .g-head { opacity: .85; }
 /* 部品を登録した人 */
 .p-by { font-size: 12px; color: var(--muted); }
+/* 部品の内容をまとめて編集 */
+.p-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.edit-btn { border: 0; background: transparent; color: var(--muted); padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+.edit-btn:hover { color: var(--accent); }
+.edit-btn[aria-pressed="true"] { color: var(--accent); font-weight: 600; }
+.p-edit { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-2); }
+.p-edit .fields { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.p-edit .field input, .p-edit .field select { background: var(--surface); padding: 6px 8px; }
+.p-edit .form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* 画面下: 部品追加の状況（失敗したらやり直せる）と選択の操作バー */
 .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; flex-direction: column; pointer-events: none; }
@@ -872,7 +880,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-11 20:54:30";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-12 20:30:30";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -944,6 +952,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
   var editQty = {}, focusQty = "";
   var editDue = {}, focusDue = "";
   var editSize = {}, focusSize = ""; /* だいたいの大きさを書き換え中の部品 */
+  var editPart = {}, focusEdit = ""; /* 内容をまとめて編集中の部品（id → 入力中の値） */
   var thumbCache = {}, thumbPending = {}, thumbFailedAt = {}; /* 部品の画像（id → { rev, data }）と、取りに行っている最中の id */
   var reading = {}; /* 「画像と大きさを読み取る」を実行中の部品 */ /* 期限を書き換え中の部品（id → 入力中の値） */ /* 数量を書き換え中の部品（id → 入力中の値）と、入力欄にフォーカスを移す部品 */
   var sel = new Set();
@@ -1601,21 +1610,6 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
       inChunks(ids, 50, function (c) { return call("api_setAssignee", token, c, me, me); }))
       .then(function () { marking = false; render(); scheduleAssignNotify(); });
   }
-  function setProcess(p, value) {
-    var n = "「" + p.name + "」", to = procInfo(value).label;
-    runOp([p.id], { run: n + "を" + to + "に変えています…", done: n + "を" + to + "に変えました", fail: n + "の加工の種類を変えられませんでした" },
-      [function () { return call("api_updatePart", token, p.id, { process: value }, me); }]);
-  }
-  /* 入力項目が同じ型の種類どうし（CNC ⇔ レーザー ⇔ 未分類）だけ切り替えられる */
-  function procBlock(p, off) {
-    var cur = procOf(p), form = formOf(p);
-    var opts = PROCESSES.concat([NONE_PROC]).filter(function (x) { return x.form === form; });
-    if (opts.length < 2) return null;
-    var sel = h("select", { "aria-label": "加工の種類: " + p.name, disabled: off, onchange: function (e) { setProcess(p, e.target.value); } },
-      opts.map(function (x) { return h("option", { value: x.id }, x.label); }));
-    sel.value = cur;
-    return h("div", { class: "p-proc" }, sel);
-  }
   function assignBlock(p, off) {
     if (p.status === "done") return null;
     var box = h("div", { class: "p-assign" });
@@ -1898,6 +1892,88 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     runOp([p.id], { run: n + "の数量を" + p.qty + "から" + q + "に変えています…", done: n + "の数量を" + q + "にしました", fail: n + "の数量を変えられませんでした" },
       [function () { return call("api_updatePart", token, p.id, { qty: q }, me); }]);
   }
+  /* ---------- 部品の内容をまとめて編集（加工の種類・板厚・材質・断面・長さ・数量・部品名・機構・備考・期限・大きさ） ---------- */
+  function startEdit(p) {
+    editPart[p.id] = {
+      process: procOf(p), name: p.name || "", thickness: p.thickness == null ? "" : fmtT(p.thickness),
+      section: p.section || "", length: p.length == null ? "" : fmtT(p.length), material: p.material || "",
+      qty: String(p.qty || 1), mechanism: p.mechanism || "", note: p.note || "", due: p.due || "", sizeText: p.sizeText || ""
+    };
+    focusEdit = p.id; render();
+  }
+  function editBlock(p) {
+    var d = editPart[p.id], form = procInfo(d.process).form, id = p.id;
+    var cancel = function () { delete editPart[id]; render(); };
+    function input(key, label, attrs, wide) {
+      var a = Object.assign({ id: "e-" + key + "-" + id, value: d[key],
+        oninput: function (e) { d[key] = e.target.value; },
+        onkeydown: function (e) { if (e.key === "Enter") { e.preventDefault(); saveEdit(p); } else if (e.key === "Escape") { cancel(); } } }, attrs || {});
+      return h("div", { class: "field" + (wide ? " wide" : "") }, h("label", { for: a.id }, label), h("input", a));
+    }
+    /* 材質・断面の候補は、同じ型の登録済みの部品から作る */
+    var same = parts.filter(function (x) { return formOf(x) === form; });
+    var byJa = function (a, b) { return a.localeCompare(b, "ja", { numeric: true }); };
+    var mats = unique(same.map(function (x) { return (x.material || "").trim(); })).sort(byJa);
+    var secs = unique(same.map(function (x) { return x.section || ""; })).sort(byJa);
+    var procSel = h("select", { id: "e-process-" + id, onchange: function (e) { d.process = e.target.value; render(); } },
+      PROCESSES.concat([NONE_PROC]).map(function (x) { return h("option", { value: x.id }, x.label); }));
+    procSel.value = d.process;
+    return h("div", { class: "p-edit" },
+      h("div", { class: "fields" },
+        h("div", { class: "field" }, h("label", { for: procSel.id }, "加工の種類"), procSel),
+        form === "pipe" ? input("section", "断面 (mm)", { list: "e-sec-list-" + id, maxlength: "20", placeholder: "例: 20×20" }) : null,
+        form !== "print" ? input("thickness", form === "pipe" ? "肉厚 (mm)" : "板厚 (mm)", { class: "mono", type: "number", inputmode: "decimal", step: "0.5", min: "0", max: "200" }) : null,
+        form === "pipe" ? input("length", "長さ (mm)", { class: "mono", type: "number", inputmode: "decimal", step: "1", min: "0", max: "10000" }) : null,
+        input("material", "材質", { list: "e-mat-list-" + id, maxlength: "30", placeholder: form === "pipe" ? "例: A6063" : form === "print" ? "例: PLA" : "例: A5052" }),
+        input("qty", "数量", { class: "mono", type: "number", inputmode: "numeric", step: "1", min: "1", max: "999" }),
+        input("due", "期限（空欄でなし）", { class: "mono", type: "date" }),
+        form !== "pipe" ? input("sizeText", "大きさ（手入力）", { maxlength: "30", placeholder: p.sizeAuto ? "空欄なら自動の 約 " + p.sizeAuto + " mm" : "例: 120×80" }) : null,
+        input("name", "部品名", { maxlength: "80" }, true),
+        input("mechanism", "要求元の機構", { list: "mech-list", maxlength: "40" }),
+        input("note", "備考", { maxlength: "200" }, true)),
+      h("datalist", { id: "e-mat-list-" + id }, mats.map(function (m) { return h("option", { value: m }); })),
+      h("datalist", { id: "e-sec-list-" + id }, secs.map(function (m) { return h("option", { value: m }); })),
+      d.process !== procOf(p) ? h("span", { class: "msg" }, "加工の種類を変えると、ドライブのフォルダも新しい種類の場所へ移します。") : null,
+      h("div", { class: "form-actions" },
+        h("button", { class: "btn small primary", type: "button", onclick: function () { saveEdit(p); } }, "保存"),
+        h("button", { class: "btn small", type: "button", onclick: cancel }, "やめる")));
+  }
+  function saveEdit(p) {
+    var d = editPart[p.id];
+    if (!d) return;
+    var form = procInfo(d.process).form;
+    var t = parseFloat(d.thickness), len = parseFloat(d.length), qty = Number(d.qty);
+    var name = d.name.trim(), sec = d.section.trim();
+    var bad = function (text, key) { showNotice(text); var el = $("e-" + key + "-" + p.id); if (el) el.focus(); };
+    if (!name) return bad("部品名を入力してください。", "name");
+    if (form === "pipe" && !sec) return bad("断面を入力してください（例: 20×20）。", "section");
+    if (form !== "print" && !(t > 0 && t <= 200)) return bad((form === "pipe" ? "肉厚" : "板厚") + "は0より大きく200以下の数値（mm）で入力してください。", "thickness");
+    if (form === "pipe" && !(len > 0 && len <= 10000)) return bad("長さは0より大きい数値（mm）で入力してください。", "length");
+    if (!(Number.isInteger(qty) && qty >= 1 && qty <= 999)) return bad("数量は1〜999の整数で入力してください。", "qty");
+    var next = {
+      process: d.process, name: name,
+      thickness: form === "print" ? null : Math.round(t * 1000) / 1000,
+      section: form === "pipe" ? sec : "", length: form === "pipe" ? Math.round(len * 10) / 10 : null,
+      material: d.material.trim(), qty: qty, mechanism: d.mechanism.trim(), note: d.note.trim(),
+      due: d.due || "", sizeText: form === "pipe" ? "" : d.sizeText.trim()
+    };
+    /* 変わった項目を作業の表示に出す */
+    var oldForm = formOf(p);
+    var cur = {
+      process: procOf(p), name: p.name || "", thickness: oldForm === "print" ? null : p.thickness, section: oldForm === "pipe" ? p.section || "" : "",
+      length: oldForm === "pipe" ? p.length : null, material: p.material || "", qty: p.qty, mechanism: p.mechanism || "", note: p.note || "",
+      due: p.due || "", sizeText: oldForm === "pipe" ? "" : p.sizeText || ""
+    };
+    var LABEL = { process: "加工の種類", name: "部品名", thickness: (form === "print" ? oldForm : form) === "pipe" ? "肉厚" : "板厚", section: "断面", length: "長さ", material: "材質", qty: "数量",
+      mechanism: "機構", note: "備考", due: "期限", sizeText: "大きさ" };
+    var changed = Object.keys(next).filter(function (k) { return String(next[k] == null ? "" : next[k]) !== String(cur[k] == null ? "" : cur[k]); });
+    delete editPart[p.id];
+    if (!changed.length) { render(); return; }
+    var what = changed.map(function (k) { return LABEL[k]; }).join("・");
+    var n = "「" + p.name + "」";
+    runOp([p.id], { run: n + "の" + what + "を変えています…", done: n + "の" + what + "を変えました", fail: n + "の" + what + "を変えられませんでした" },
+      [function () { return call("api_updatePart", token, p.id, next, me); }]);
+  }
   function partRow(p) {
     var done = p.status === "done";
     var off = !!busy[p.id];
@@ -1934,15 +2010,18 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
               p.mechanism ? h("span", null, p.mechanism) : null,
               qtyBlock(p, off),
               formOf(p) === "pipe" ? h("span", { class: "len" }, "L" + fmtT(p.length) + "mm") : null))),
-        sizeBlock(p, off),
-        dueBlock(p, off),
-        assignBlock(p, off),
-        procBlock(p, off),
-        p.note ? h("span", { class: "p-note" }, p.note) : null,
+        editPart[p.id] ? editBlock(p) : [
+          sizeBlock(p, off),
+          dueBlock(p, off),
+          assignBlock(p, off),
+          p.note ? h("span", { class: "p-note" }, p.note) : null],
         addedLine ? h("span", { class: "p-by" }, addedLine) : null,
         done ? h("span", { class: "p-done" }, doneLine) : null,
         camBlock(p)),
-      del);
+      h("div", { class: "p-side" },
+        h("button", { class: "edit-btn", type: "button", disabled: off, "aria-pressed": String(!!editPart[p.id]), title: "板厚・材質・部品名・加工の種類などを変える",
+          onclick: function () { if (editPart[p.id]) { delete editPart[p.id]; render(); } else startEdit(p); } }, editPart[p.id] ? "閉じる" : "編集"),
+        del));
   }
 
   /* 加工の種類の切り替え（部品のある種類と、選んでいる種類だけ出す） */
@@ -2067,7 +2146,9 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     Array.prototype.forEach.call(document.querySelectorAll(".tabs button[data-view]"), function (b) { b.setAttribute("aria-pressed", String(b.dataset.view === view)); });
     updateBar();
 
-    var root = $("groups"); root.textContent = "";
+    var root = $("groups");
+    var act = document.activeElement, keep = act && act.id && root.contains(act) ? { id: act.id, s: act.selectionStart, e: act.selectionEnd } : null;
+    root.textContent = "";
     if (!ready) return;
     if (!parts.length) {
       root.appendChild(h("div", { class: "empty" },
@@ -2155,6 +2236,13 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     if (focusSize) {
       var zi = $("size-" + focusSize); focusSize = "";
       if (zi) { zi.focus(); zi.select(); }
+    }
+    if (focusEdit) {
+      var ei = $("e-thickness-" + focusEdit) || $("e-material-" + focusEdit); focusEdit = "";
+      if (ei) ei.focus();
+    } else if (keep && $(keep.id) && document.activeElement !== $(keep.id)) {
+      var ke = $(keep.id); ke.focus();
+      try { if (keep.s != null) ke.setSelectionRange(keep.s, keep.e); } catch (e) {}
     }
     loadThumbs();
   }
