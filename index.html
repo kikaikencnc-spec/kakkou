@@ -455,8 +455,6 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
   </section>
 
 
-  <div class="tabs proc-tabs app-only" id="proc-tabs" role="group" aria-label="加工の種類"></div>
-
   <div class="toolbar app-only">
     <div class="tabs" role="group" aria-label="表示する状態">
       <button type="button" data-view="all" aria-pressed="true">すべて<span class="n" id="n-all">0</span></button>
@@ -472,6 +470,8 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
       </div>
     </div>
   </div>
+
+  <div class="tabs proc-tabs app-only" id="proc-tabs" role="group" aria-label="加工の種類"></div>
 
   <main class="groups app-only" id="groups" aria-live="polite"></main>
   <p class="msg app-only" id="build-info" hidden></p>
@@ -880,7 +880,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-12 20:33:53";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-13 17:39:56";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -2028,13 +2028,17 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
   function renderProcTabs() {
     var box = $("proc-tabs"); box.textContent = "";
     var count = {};
-    parts.forEach(function (p) { var k = procOf(p); count[k] = (count[k] || 0) + 1; });
-    var items = [{ id: "", label: "すべて" }].concat(PROCESSES).concat(count.none ? [NONE_PROC] : []);
+    /* 数は、上の「すべて / 未加工 / 加工済み」と機構・担当の絞り込みに合う部品だけ数える（押したときに出る点数） */
+    var inView = parts.filter(function (p) {
+      return (view === "all" || (view === "done") === (p.status === "done")) && (!mechFilter || p.mechanism === mechFilter) && whoMatch(p);
+    });
+    inView.forEach(function (p) { var k = procOf(p); count[k] = (count[k] || 0) + 1; });
+    var items = [{ id: "", label: "すべて" }].concat(PROCESSES).concat(parts.some(function (p) { return procOf(p) === "none"; }) ? [NONE_PROC] : []);
     if (procFilter && !items.some(function (x) { return x.id === procFilter; })) items.push(procInfo(procFilter));
     items.forEach(function (x) {
       box.appendChild(h("button", { type: "button", "aria-pressed": String(procFilter === x.id), onclick: function () {
         procFilter = x.id; store("cnc-proc", x.id); render();
-      } }, x.label, h("span", { class: "n" }, String(x.id ? (count[x.id] || 0) : parts.length))));
+      } }, x.label, h("span", { class: "n" }, String(x.id ? (count[x.id] || 0) : inView.length))));
     });
   }
   /* ---------- 部品の追加フォーム: ① ファイル → ② 加工の種類 → ③ 内容 ---------- */
