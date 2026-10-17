@@ -930,7 +930,7 @@ form.add.batch .per-part { display: none !important; }
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-17 15:14:15";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-17 15:27:53";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -1955,7 +1955,10 @@ form.add.batch .per-part { display: none !important; }
       var m = "「" + root.name + "」に" + list.length + "点を保存しました（" + made.slice(0, 3).join("、") + (made.length > 3 ? " ほか" : "") + "）。";
       if (failed.length) m += "取得できなかったファイル: " + failed.join("、") + "。";
       if (noCam.length) m += "ファイルが無い部品: " + noCam.join("、") + "。";
-      showNotice(m, failed.length > 0);
+      /* 全部保存できたら選択を解除して操作バーを閉じ、画面下に数秒「保存しました」を出す。
+         取得できなかったものがあれば選んだまま残し（やり直せるように）、上に残るお知らせで知らせる */
+      if (failed.length) showNotice(m, true);
+      else { finishJob(newJob(), m); sel.clear(); render(); }
     }, function (e) {
       if (e && e.name === "AbortError") return; /* 保存先を選ぶ画面で取り消した */
       if (e && e.name === "NotFoundError") showNotice("保存先のフォルダが見つかりません。操作バーの「保存先 … 変更」から選び直してください。", true);
