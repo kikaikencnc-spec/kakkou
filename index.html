@@ -341,6 +341,36 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 .job.error .txt { color: var(--danger); }
 @keyframes job-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .job.run .txt::before { animation: none; } }
+/* 複数のフォルダをまとめて追加するときは、部品ごとの欄（部品名・断面・長さ）はフォルダ名から入れるので隠す */
+form.add.batch .per-part { display: none !important; }
+.f-list .dir { font-weight: 600; }
+/* 図面を見るボタン（図面のある部品だけ） */
+.draw-btn { font-size: 12px; font-weight: 600; padding: 1px 10px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+.draw-btn:hover { background: var(--accent); color: var(--on-accent); }
+/* 操作バーの保存先 */
+.ab-info .ab-dest { font-size: 12px; color: inherit; opacity: .8; }
+.ab-dest b { font-weight: 600; }
+.ab-dest .linkbtn { color: inherit; font-size: 12px; padding: 0 2px; }
+/* 図面ビューア（全画面） */
+.viewer { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--bg); color: var(--fg); }
+.viewer[open] { display: flex; flex-direction: column; }
+.viewer::backdrop { background: rgba(0, 0, 0, .6); }
+.vw-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.vw-title { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.vw-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.vw-tabs[hidden] { display: none; }
+.vw-tabs button { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vw-tabs button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.vw-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vw-pages { display: inline-flex; align-items: center; gap: 4px; }
+.vw-pages[hidden] { display: none; }
+.vw-pn { font-family: var(--mono); font-size: 13px; min-width: 4em; text-align: center; }
+.vw-stage { position: relative; flex: 1; min-height: 0; overflow: auto; touch-action: none; cursor: grab; background: var(--surface-2); }
+.vw-stage:active { cursor: grabbing; }
+.vw-inner { display: grid; place-items: center; min-width: 100%; min-height: 100%; padding: 8px; box-sizing: border-box; width: max-content; }
+.vw-inner > img, .vw-inner > canvas { display: block; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); user-select: none; -webkit-user-drag: none; }
+.vw-msg { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--muted); pointer-events: none; }
+.vw-msg[hidden] { display: none; }
 </style>
 
 </head>
@@ -409,10 +439,12 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
       <div class="step">
         <div class="step-h"><span class="step-n">1</span>ファイルを選ぶ<small>任意・複数可・1ファイル20MBまで</small></div>
         <label class="dropzone" id="f-drop" for="f-files">
-          <strong>ここにファイルをドラッグ</strong>
-          <span>またはクリックして選ぶ。.stl は 3Dプリンター、.dxf はレーザー、.nc / .tap / .cnc は CNC に自動で分類します</span>
+          <strong>ここにファイルかフォルダをドラッグ</strong>
+          <span>またはクリックしてファイルを選ぶ。.stl は 3Dプリンター、.dxf はレーザー、.nc / .tap / .cnc は CNC に自動で分類します。「部品名_幅_高さ_長さ」のフォルダ（例: ASP1_15_10_300）は角パイプとして寸法を自動で入れます（複数のフォルダをまとめても可）</span>
         </label>
         <input id="f-files" class="visually-hidden" type="file" multiple>
+        <div><button class="linkbtn" id="f-dir-btn" type="button">フォルダを選ぶ</button></div>
+        <input id="f-dir" class="visually-hidden" type="file" multiple webkitdirectory>
         <ul class="f-list" id="f-list" hidden></ul>
       </div>
       <div class="step" id="f-step2">
@@ -423,14 +455,14 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
       <div class="step" id="f-step3" hidden>
         <div class="step-h"><span class="step-n">3</span>内容</div>
         <div class="fields">
-          <div class="field" data-forms="pipe"><label for="f-sec">断面 (mm)</label><input id="f-sec" list="sec-list" maxlength="20" placeholder="例: 20×20"></div>
+          <div class="field per-part" data-forms="pipe"><label for="f-sec">断面 (mm)</label><input id="f-sec" list="sec-list" maxlength="20" placeholder="例: 20×20"></div>
           <div class="field" data-forms="plate pipe"><label for="f-t" id="f-t-label">板厚 (mm)</label><input id="f-t" class="mono" type="number" inputmode="decimal" step="0.5" min="0" max="200" placeholder="例: 5"></div>
-          <div class="field" data-forms="pipe"><label for="f-len">長さ (mm)</label><input id="f-len" class="mono" type="number" inputmode="decimal" step="1" min="0" max="10000" placeholder="例: 300"></div>
+          <div class="field per-part" data-forms="pipe"><label for="f-len">長さ (mm)</label><input id="f-len" class="mono" type="number" inputmode="decimal" step="1" min="0" max="10000" placeholder="例: 300"></div>
           <div class="field"><label for="f-mat">材質</label><input id="f-mat" list="mat-list" maxlength="30" placeholder="例: A5052"></div>
           <div class="field"><label for="f-qty">数量</label><input id="f-qty" class="mono" type="number" inputmode="numeric" step="1" min="1" max="999" value="1"></div>
           <div class="field"><label for="f-due">いつまでに（任意）</label><input id="f-due" class="mono" type="date"></div>
           <div class="field" data-forms="plate print"><label for="f-size">だいたいの大きさ（任意）</label><input id="f-size" maxlength="30" placeholder="例: 120×80（自動で読めないとき）"></div>
-          <div class="field wide"><label for="f-name">部品名</label><input id="f-name" maxlength="80" placeholder="ファイルを選ぶと、ファイル名から入ります"></div>
+          <div class="field wide per-part"><label for="f-name">部品名</label><input id="f-name" maxlength="80" placeholder="ファイルを選ぶと、ファイル名から入ります"></div>
           <div class="field"><label for="f-mech">要求元の機構</label><input id="f-mech" list="mech-list" maxlength="40" placeholder="例: 足回り"></div>
           <div class="field wide"><label for="f-note">備考</label><input id="f-note" maxlength="200" placeholder="例: 穴径は図面の公差どおり"></div>
         </div>
@@ -481,8 +513,10 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 <div class="jobs" id="jobs" aria-live="polite"></div>
 <div class="actionbar" id="actionbar" hidden>
   <div class="in">
-    <div class="ab-info"><strong id="ab-count">0点を選択中</strong><span id="ab-detail"></span></div>
+    <div class="ab-info"><strong id="ab-count">0点を選択中</strong><span id="ab-detail"></span>
+      <span class="ab-dest" id="ab-dest" hidden>保存先: <b id="ab-dest-name"></b> <button class="linkbtn" id="ab-dest-change" type="button">変更</button></span></div>
     <div class="ab-btns">
+      <button class="btn primary" id="ab-dir" type="button" hidden>フォルダに保存</button>
       <button class="btn primary" id="ab-zip" type="button">ファイルをzipでダウンロード</button>
       <button class="btn" id="ab-assign" type="button">担当する</button>
       <button class="btn" id="ab-done" type="button">加工済みにする</button>
@@ -493,6 +527,22 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 </div>
 
 <!-- 部品の画像の拡大表示（画面の処理より前に置く。後ろに置くと処理の開始時に見つからず止まる） -->
+<!-- 図面ビューア（添付の .pdf・画像を全画面で見る） -->
+<dialog id="viewer" class="viewer" aria-label="図面">
+  <div class="vw-head">
+    <strong class="vw-title" id="vw-title"></strong>
+    <div class="vw-tabs" id="vw-tabs" role="group" aria-label="表示するファイル"></div>
+    <div class="vw-tools">
+      <span class="vw-pages" id="vw-pages" hidden><button class="btn small" id="vw-prev" type="button" aria-label="前のページ">‹</button><span id="vw-page" class="vw-pn"></span><button class="btn small" id="vw-next" type="button" aria-label="次のページ">›</button></span>
+      <button class="btn small" id="vw-out" type="button" aria-label="縮小">－</button>
+      <button class="btn small" id="vw-fit" type="button">全体</button>
+      <button class="btn small" id="vw-in" type="button" aria-label="拡大">＋</button>
+      <button class="btn small" id="vw-save" type="button">保存</button>
+      <button class="btn small primary" id="vw-close" type="button">閉じる</button>
+    </div>
+  </div>
+  <div class="vw-stage" id="vw-stage"><div class="vw-inner" id="vw-inner"></div><p class="vw-msg" id="vw-msg" hidden></p></div>
+</dialog>
 <dialog id="thumb-dialog" class="thumb-dialog" aria-label="部品の画像"><img id="thumb-big" alt=""><p id="thumb-cap" class="msg"></p><button class="btn small" type="button" id="thumb-close">閉じる</button></dialog>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
@@ -880,7 +930,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
 
-<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-13 17:39:56";</script>
+<script>window.CNC_API_URL = "https://script.google.com/macros/s/AKfycbzG0rqrxeCfHqBO56nabBBjuAPPg1CUwbHo9tm_4wfaStB5TYClO_L_YvzGN9crI0bz/exec"; window.CNC_BUILD = "2026-10-17 15:14:15";</script>
 <script>
 (function () {
   var NO_MAT = "材質未設定";
@@ -920,6 +970,28 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     if (f === "print") return mat;
     return "t" + fmtT(p.thickness) + "mm_" + mat;
   }
+  /* フォルダ名「部品名_幅_高さ_長さ」（例: ASP1_15_10_300）から角パイプの寸法を読む。合わなければ null */
+  function folderDims(dir) {
+    var m = /^(.+?)_(\d+(?:\.\d+)?)_(\d+(?:\.\d+)?)_(\d+(?:\.\d+)?)$/.exec(String(dir).trim());
+    return m ? { name: m[1].slice(0, 80), section: m[2] + "×" + m[3], length: parseFloat(m[4]) } : null;
+  }
+  /* 保存するときの部品のフォルダ名。角パイプは元のフォルダと同じ「部品名_幅_高さ_長さ」、ほかは「部品名_x数量_機構」 */
+  function partDir(p) {
+    if (formOf(p) === "pipe") {
+      var s = String(p.section || "").replace(/^□/, "").split(/\s*[×xX*]\s*/).filter(Boolean);
+      var tail = safe("_" + (s.length === 2 ? s[0] + "_" + s[1] : s.length === 1 ? s[0] + "_" + s[0] : p.section) + "_" + fmtT(p.length));
+      var n = safe(p.name);
+      return n.slice(-tail.length) === tail ? n : n + tail;
+    }
+    return safe(p.name) + "_x" + (p.qty || 1) + (p.mechanism ? "_" + safe(p.mechanism) : "");
+  }
+  /* 同じフォルダに同じ名前のファイルがあれば _2, _3 を付ける */
+  function uniqName(used, name) {
+    var fn = safeFile(name), base = fn, n = 2;
+    while (used[fn]) { fn = base.replace(/(\.[^.]+)?$/, "_" + n++ + "$1"); }
+    used[fn] = 1;
+    return fn;
+  }
   /* 部品の説明（追加したときの知らせなど） */
   function partDesc(p) {
     var f = formOf(p), bits = [procInfo(p.process).label];
@@ -939,6 +1011,9 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     svg: "image/svg+xml", txt: "text/plain", csv: "text/csv", zip: "application/zip", dxf: "image/vnd.dxf",
     step: "model/step", stp: "model/step", stl: "model/stl"
   };
+  var VIEW_EXTS = ["png", "jpg", "jpeg", "gif", "webp", "pdf"]; /* 図面ビューアで開けるファイル（この順に並べる。軽い画像を先に） */
+  var PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/"; /* PDF を描く部品（図面を初めて開いたときだけ読み込む） */
+  var CAN_DIR = typeof window.showDirectoryPicker === "function"; /* フォルダへ直接保存できるブラウザか（PC の Chrome・Edge） */
 
   var parts = [], cams = [], members = [], rev = null;
   var view = "all";
@@ -956,7 +1031,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
   var thumbCache = {}, thumbPending = {}, thumbFailedAt = {}; /* 部品の画像（id → { rev, data }）と、取りに行っている最中の id */
   var reading = {}; /* 「画像と大きさを読み取る」を実行中の部品 */ /* 期限を書き換え中の部品（id → 入力中の値） */ /* 数量を書き換え中の部品（id → 入力中の値）と、入力欄にフォーカスを移す部品 */
   var sel = new Set();
-  var zipping = false, zipLabel = "", marking = false;
+  var zipping = false, zipLabel = "", marking = false, saveMode = ""; /* saveMode: 保存中の方法（"zip" / "dir"） */
   var dateFmt = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" });
 
   function $(id) { return document.getElementById(id); }
@@ -1474,6 +1549,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     files.forEach(function (c) {
       var ext = extOf(c.name);
       var line = h("div", { class: "cam-file" }, ext ? h("span", { class: "kind" }, ext) : null, h("span", { class: "fname" }, c.name), h("span", { class: "sz" }, fmtSize(c.size)));
+      if (canView(c.name)) line.appendChild(h("button", { class: "linkbtn", type: "button", onclick: function () { openViewer(p, c); } }, "見る"));
       line.appendChild(h("button", { class: "linkbtn", type: "button", disabled: !!saving[c.id], onclick: function () { saveCam(c); } }, saving[c.id] ? "取得中…" : "保存"));
       var d = h("button", { class: "linkbtn", type: "button", disabled: !!camBusy[p.id] });
       twoStep(d, deleting[c.id] ? "削除中…" : "削除", "削除する？", function () { removeCam(c); });
@@ -1485,8 +1561,218 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     return box;
   }
 
+  /* ---------- 図面ビューア（添付の .pdf・画像を全画面で大きく見る。普段は閉じておく） ---------- */
+  function canView(name) { return VIEW_EXTS.indexOf(extOf(name)) >= 0; }
+  function drawingsOf(pid) {
+    return camsOf(pid).filter(function (c) { return canView(c.name); }).sort(function (a, b) {
+      return VIEW_EXTS.indexOf(extOf(a.name)) - VIEW_EXTS.indexOf(extOf(b.name)) || a.name.localeCompare(b.name, "ja", { numeric: true });
+    });
+  }
+  var vwCache = {}; /* ファイルの id → Promise<{ bytes, kind: "img" | "pdf", url, doc }>（ページを開いているあいだ覚えておく） */
+  var pdfLib = null;
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = src; s.onload = resolve;
+      s.onerror = function () { s.remove(); reject(new Error("PDF を表示する部品を読み込めませんでした。通信を確かめてください。")); };
+      document.head.appendChild(s);
+    });
+  }
+  function loadPdfJs() {
+    if (!pdfLib) {
+      pdfLib = loadScript(PDFJS + "build/pdf.min.js").then(function () {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "build/pdf.worker.min.js";
+        return window.pdfjsLib;
+      });
+      pdfLib.catch(function () { pdfLib = null; });
+    }
+    return pdfLib;
+  }
+  function loadDrawing(c) {
+    if (!vwCache[c.id]) {
+      vwCache[c.id] = fetchCamBytes(c).then(function (bytes) {
+        if (extOf(c.name) !== "pdf") return { bytes: bytes, kind: "img", url: URL.createObjectURL(new Blob([bytes], { type: MIME[extOf(c.name)] || "image/png" })) };
+        return loadPdfJs().then(function (lib) {
+          /* 日本語の文字の対応表・標準のフォントも同じ場所から取る（図面の文字が化けないように） */
+          return lib.getDocument({ data: bytes.slice(), cMapUrl: PDFJS + "cmaps/", cMapPacked: true, standardFontDataUrl: PDFJS + "standard_fonts/" }).promise;
+        }).then(function (doc) { return { bytes: bytes, kind: "pdf", doc: doc }; });
+      });
+      vwCache[c.id].catch(function () { delete vwCache[c.id]; });
+    }
+    return vwCache[c.id];
+  }
+  /* vw: 開いている部品・ファイル、読み込んだ中身、ページ、倍率（1 = 画面に全体が収まる大きさ）、元の大きさ */
+  var vw = { part: null, files: [], i: 0, d: null, pg: null, page: 1, zoom: 1, base: null, task: null, timer: null };
+  function openViewer(p, file) {
+    var files = drawingsOf(p.id);
+    if (!files.length) return;
+    vw.part = p; vw.files = files;
+    var k = file ? files.map(function (c) { return c.id; }).indexOf(file.id) : 0;
+    $("vw-title").textContent = p.name;
+    var dlg = $("viewer");
+    if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", ""); }
+    showDrawing(k < 0 ? 0 : k);
+  }
+  function vwMsg(t) { var m = $("vw-msg"); m.textContent = t; m.hidden = !t; }
+  function vwTabs() {
+    var box = $("vw-tabs"); box.textContent = "";
+    box.hidden = vw.files.length < 2;
+    vw.files.forEach(function (c, k) {
+      box.appendChild(h("button", { type: "button", "aria-pressed": String(k === vw.i), title: c.name, onclick: function () { if (k !== vw.i) showDrawing(k); } }, c.name));
+    });
+  }
+  function vwTools() {
+    var pdf = !!(vw.d && vw.d.kind === "pdf"), n = pdf ? vw.d.doc.numPages : 1;
+    $("vw-pages").hidden = !pdf || n < 2;
+    $("vw-page").textContent = vw.page + " / " + n;
+    $("vw-prev").disabled = vw.page <= 1; $("vw-next").disabled = vw.page >= n;
+    $("vw-in").disabled = !vw.base || vw.zoom >= 8;
+    $("vw-out").disabled = !vw.base || vw.zoom <= 1;
+    $("vw-fit").disabled = !vw.base;
+    $("vw-save").disabled = !vw.d;
+  }
+  function showDrawing(k) {
+    var c = vw.files[k];
+    vw.i = k; vw.d = null; vw.pg = null; vw.page = 1; vw.zoom = 1; vw.base = null;
+    if (vw.task) { vw.task.cancel(); vw.task = null; }
+    vwTabs();
+    $("vw-inner").textContent = "";
+    vwMsg("「" + c.name + "」を読み込んでいます…");
+    vwTools();
+    loadDrawing(c).then(function (d) {
+      if (vw.files[vw.i] !== c || !$("viewer").open) return;
+      vw.d = d; vwMsg("");
+      if (d.kind === "img") {
+        var img = h("img", { src: d.url, alt: c.name, draggable: "false" });
+        img.onload = function () { if (vw.d !== d) return; vw.base = { w: img.naturalWidth, h: img.naturalHeight }; layout(); vwTools(); };
+        $("vw-inner").appendChild(img);
+      } else {
+        $("vw-inner").appendChild(h("canvas", { role: "img", "aria-label": c.name }));
+        setPage(1);
+      }
+      vwTools();
+    }, function (e) {
+      if (vw.files[vw.i] === c) vwMsg("「" + c.name + "」を表示できませんでした: " + errText(e, "通信エラー"));
+    });
+  }
+  function setPage(n) {
+    var d = vw.d;
+    if (!d || d.kind !== "pdf" || n < 1 || n > d.doc.numPages) return;
+    vw.page = n; vwTools();
+    d.doc.getPage(n).then(function (pg) {
+      if (vw.d !== d || vw.page !== n) return;
+      var v = pg.getViewport({ scale: 1 });
+      vw.pg = pg; vw.base = { w: v.width, h: v.height }; vw.zoom = 1;
+      $("vw-stage").scrollTop = 0; $("vw-stage").scrollLeft = 0;
+      layout(); vwTools();
+    }, function () { vwMsg("このページを表示できませんでした。"); });
+  }
+  /* 画面に全体が収まる大きさ × 倍率 */
+  function fitSize() {
+    var st = $("vw-stage"), pad = 16;
+    var k = Math.min((st.clientWidth - pad) / vw.base.w, (st.clientHeight - pad) / vw.base.h);
+    return { w: Math.max(1, vw.base.w * k * vw.zoom), h: Math.max(1, vw.base.h * k * vw.zoom) };
+  }
+  function layout() {
+    var el = $("vw-inner").firstChild;
+    if (!vw.base || !el || $("vw-stage").clientWidth < 40) return; /* まだ大きさが決まっていない（決まったら ResizeObserver が呼ぶ） */
+    var s = fitSize();
+    el.style.width = s.w + "px"; el.style.height = s.h + "px";
+    if (el.tagName === "CANVAS") { clearTimeout(vw.timer); vw.timer = setTimeout(drawPdf, 120); }
+  }
+  /* PDF は表示する大きさに合わせて描き直す（拡大しても線がぼやけないように）。描き終わるまでは前の絵を引き伸ばして見せる */
+  function drawPdf() {
+    var cv = $("vw-inner").firstChild;
+    if (!vw.pg || !cv || cv.tagName !== "CANVAS") return;
+    var s = fitSize(), dpr = window.devicePixelRatio || 1;
+    var sc = Math.min(s.w * dpr, 8192) / vw.base.w;
+    var area = vw.base.w * vw.base.h * sc * sc, MAX = 24e6; /* 端末のメモリを使いすぎない */
+    if (area > MAX) sc *= Math.sqrt(MAX / area);
+    var v = vw.pg.getViewport({ scale: sc });
+    var off = document.createElement("canvas");
+    off.width = Math.floor(v.width); off.height = Math.floor(v.height);
+    var ctx = off.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, off.width, off.height);
+    if (vw.task) vw.task.cancel();
+    var task = vw.task = vw.pg.render({ canvasContext: ctx, viewport: v });
+    task.promise.then(function () {
+      if (vw.task !== task) return;
+      vw.task = null;
+      cv.width = off.width; cv.height = off.height;
+      cv.getContext("2d").drawImage(off, 0, 0);
+    }, function () {});
+  }
+  /* 倍率を変える。(cx, cy) の点が同じ場所に残るようにずらす */
+  function zoomAt(z, cx, cy) {
+    if (!vw.base) return;
+    var st = $("vw-stage"), r = st.getBoundingClientRect();
+    z = Math.max(1, Math.min(8, z));
+    if (cx == null) { cx = r.left + st.clientWidth / 2; cy = r.top + st.clientHeight / 2; }
+    var px = cx - r.left, py = cy - r.top, ratio = z / vw.zoom;
+    var sx = (st.scrollLeft + px) * ratio - px, sy = (st.scrollTop + py) * ratio - py;
+    vw.zoom = z; layout();
+    st.scrollLeft = sx; st.scrollTop = sy;
+    vwTools();
+  }
+  (function () {
+    var st = $("vw-stage"), pts = {}, pinch = null;
+    function list() { return Object.keys(pts).map(function (k) { return pts[k]; }); }
+    function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) || 1; }
+    function startPinch() { var l = list(); pinch = l.length >= 2 ? { d: dist(l[0], l[1]), z: vw.zoom } : null; }
+    /* 1本指・マウスのドラッグで動かす、2本指で拡大縮小 */
+    st.addEventListener("pointerdown", function (e) {
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      try { st.setPointerCapture(e.pointerId); } catch (err) {}
+      startPinch();
+    });
+    st.addEventListener("pointermove", function (e) {
+      var p = pts[e.pointerId];
+      if (!p) return;
+      var dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      var l = list();
+      if (l.length >= 2 && pinch) zoomAt(pinch.z * dist(l[0], l[1]) / pinch.d, (l[0].x + l[1].x) / 2, (l[0].y + l[1].y) / 2);
+      else { st.scrollLeft -= dx; st.scrollTop -= dy; }
+    });
+    function up(e) { delete pts[e.pointerId]; startPinch(); }
+    st.addEventListener("pointerup", up);
+    st.addEventListener("pointercancel", up);
+    /* PC: ホイールで拡大縮小、ダブルクリック（ダブルタップ）で 全体 ⇔ 3倍 */
+    st.addEventListener("wheel", function (e) {
+      if (!vw.base) return;
+      e.preventDefault();
+      zoomAt(vw.zoom * Math.pow(1.0015, -e.deltaY * (e.deltaMode === 1 ? 33 : 1)), e.clientX, e.clientY);
+    }, { passive: false });
+    st.addEventListener("dblclick", function (e) { zoomAt(vw.zoom > 1.5 ? 1 : 3, e.clientX, e.clientY); });
+  })();
+  $("vw-in").addEventListener("click", function () { zoomAt(vw.zoom * 1.5); });
+  $("vw-out").addEventListener("click", function () { zoomAt(vw.zoom / 1.5); });
+  $("vw-fit").addEventListener("click", function () { zoomAt(1); });
+  $("vw-prev").addEventListener("click", function () { setPage(vw.page - 1); });
+  $("vw-next").addEventListener("click", function () { setPage(vw.page + 1); });
+  $("vw-save").addEventListener("click", function () {
+    if (vw.d) saveBlob(new Blob([vw.d.bytes], { type: "application/octet-stream" }), safeFile(vw.files[vw.i].name));
+  });
+  $("vw-close").addEventListener("click", function () { $("viewer").close(); });
+  $("viewer").addEventListener("close", function () {
+    if (vw.task) { vw.task.cancel(); vw.task = null; }
+    clearTimeout(vw.timer);
+    vw.d = null; vw.pg = null; vw.base = null;
+    $("vw-inner").textContent = "";
+  });
+  $("viewer").addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") setPage(vw.page - 1);
+    else if (e.key === "ArrowRight") setPage(vw.page + 1);
+    else if (e.key === "+" || e.key === "=") zoomAt(vw.zoom * 1.5);
+    else if (e.key === "-") zoomAt(vw.zoom / 1.5);
+    else if (e.key === "0") zoomAt(1);
+  });
+  /* 表示する場所の大きさが決まった・変わったら合わせ直す（開いた直後や画面の回転） */
+  if (window.ResizeObserver) new ResizeObserver(function () { if ($("viewer").open) layout(); }).observe($("vw-stage"));
+  else window.addEventListener("resize", function () { if ($("viewer").open) layout(); });
+
   /* ---------- 一括選択とzip ---------- */
-  var zipArmed = false, zipArmTimer = null;
+  var zipArmed = "", zipArmTimer = null; /* 他の人の担当を含むとき、1回目に押したボタン（"zip" / "dir"） */
   /* 自分以外の人が担当している未加工の部品 */
   function othersIn(list) { return list.filter(function (p) { return p.status !== "done" && p.assignee && p.assignee !== me; }); }
   function selectedParts() { return parts.filter(function (p) { return sel.has(p.id); }); }
@@ -1520,7 +1806,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     var list = selectedParts();
     if (!list.length) return;
     if (typeof JSZip === "undefined") { showNotice("zip作成用の部品を読み込めませんでした。ページを開き直してください。"); return; }
-    zipping = true; zipLabel = ""; updateBar();
+    zipping = true; saveMode = "zip"; zipLabel = ""; updateBar();
     var z = new JSZip();
     var rows = [["加工の種類", "板厚・肉厚(mm)", "断面", "長さ(mm)", "材質", "部品名", "数量", "期限", "大きさ(mm)", "機構", "備考", "ファイル"]];
     var noCam = [], failed = [], jobs = [];
@@ -1528,15 +1814,13 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     var procs = unique(list.map(procOf));
     list.sort(function (a, b) { return procOrder(procOf(a)) - procOrder(procOf(b)) || stockDir(a).localeCompare(stockDir(b), "ja", { numeric: true }) || String(a.name).localeCompare(String(b.name), "ja"); })
       .forEach(function (p) {
-        var dir = (procs.length > 1 ? safe(procInfo(procOf(p)).label) + "/" : "") + stockDir(p) + "/" + safe(p.name) + (formOf(p) === "pipe" ? "_L" + fmtT(p.length) : "") + "_x" + (p.qty || 1) + (p.mechanism ? "_" + safe(p.mechanism) : "") + "/";
+        var dir = (procs.length > 1 ? safe(procInfo(procOf(p)).label) + "/" : "") + stockDir(p) + "/" + partDir(p) + "/";
         var files = camsOf(p.id);
         rows.push([procInfo(procOf(p)).label, p.thickness == null ? "" : fmtT(p.thickness), p.section || "", p.length == null ? "" : fmtT(p.length), matOf(p), p.name, p.qty || 1, p.due || "", p.sizeText || p.sizeAuto || "", p.mechanism || "", p.note || "", files.map(function (c) { return c.name; }).join(" / ")]);
         if (!files.length) noCam.push(p.name);
         var used = {};
         files.forEach(function (c) {
-          var fn = safeFile(c.name); var base = fn, n = 2;
-          while (used[fn]) { fn = base.replace(/(\.[^.]+)?$/, "_" + n++ + "$1"); }
-          used[fn] = 1;
+          var fn = uniqName(used, c.name);
           jobs.push(function () {
             return fetchCamBytes(c).then(function (b) { z.file(dir + fn, b); })
               .catch(function () { failed.push(p.name + "（" + c.name + "）"); });
@@ -1557,9 +1841,126 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
       var m = "保存しました。";
       if (failed.length) m += "取得できなかったファイル: " + failed.join("、") + "。";
       m += noCam.length ? "ファイルが無い部品: " + noCam.join("、") + "（加工リスト.csv には含めています）" : "zip内の「加工リスト.csv」に数量と機構をまとめています。";
+      m += dirHint();
       showNotice(m, failed.length > 0);
     }).catch(function () { showNotice("zipを作成できませんでした。もう一度お試しください。"); })
-      .then(function () { zipping = false; zipLabel = ""; updateBar(); });
+      .then(function () { zipping = false; saveMode = ""; zipLabel = ""; updateBar(); });
+  }
+  /* フォルダへ直接保存できないブラウザで zip を保存したとき、1回だけ使えるブラウザを知らせる（PC だけ） */
+  var dirHintShown = false;
+  function dirHint() {
+    if (CAN_DIR || dirHintShown || (window.matchMedia && matchMedia("(pointer: coarse)").matches)) return "";
+    dirHintShown = true;
+    return navigator.brave ? " Brave でフォルダへ直接保存するには、アドレス欄に brave://flags/#file-system-access-api と入れて「Enabled」にし、Brave を再起動してください。"
+      : " zip を展開せずにフォルダへ直接保存したいときは、Chrome か Edge で開いてください。";
+  }
+
+  /* ---------- フォルダへ直接保存（PC の Chrome・Edge）。保存先: {選んだフォルダ}/{プロジェクト}/{種類}/[{区画}/]{部品}/ ---------- */
+  function idb() {
+    return new Promise(function (resolve, reject) {
+      var r = indexedDB.open("kakkou", 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore("kv"); };
+      r.onsuccess = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+  }
+  function idbGet(k) {
+    return idb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var q = db.transaction("kv").objectStore("kv").get(k);
+        q.onsuccess = function () { resolve(q.result); }; q.onerror = function () { reject(q.error); };
+      });
+    }).catch(function () { return null; });
+  }
+  function idbSet(k, v) {
+    return idb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var t = db.transaction("kv", "readwrite");
+        t.objectStore("kv").put(v, k);
+        t.oncomplete = function () { resolve(); }; t.onerror = function () { reject(t.error); };
+      });
+    }).catch(function () {});
+  }
+  var saveRoot = null; /* 保存先のフォルダ（ブラウザに覚えておく） */
+  if (CAN_DIR) idbGet("saveRoot").then(function (hd) { if (hd && !saveRoot) { saveRoot = hd; updateBar(); } });
+  function pickRoot() {
+    return window.showDirectoryPicker({ id: "kakkou-save", mode: "readwrite", startIn: "documents" }).then(function (hd) {
+      saveRoot = hd; idbSet("saveRoot", hd); updateBar();
+      return hd;
+    });
+  }
+  /* 保存先を取り出す。初めてなら選んでもらう。ブラウザを開き直したあとは書き込みの許可を1回聞かれることがある */
+  function getRoot() {
+    if (!saveRoot) return pickRoot();
+    var hd = saveRoot;
+    if (!hd.queryPermission) return Promise.resolve(hd);
+    return hd.queryPermission({ mode: "readwrite" }).then(function (st) {
+      return st === "granted" ? st : hd.requestPermission({ mode: "readwrite" });
+    }).then(function (st) {
+      if (st !== "granted") throw new Error("保存先のフォルダへの書き込みが許可されませんでした。");
+      return hd;
+    });
+  }
+  /* parent の中に name のフォルダを新しく作る。同じ名前があれば name_2, name_3 … にする */
+  function freshDir(parent, name) {
+    var n = 1;
+    function attempt() {
+      var nm = n === 1 ? name : name + "_" + n;
+      return parent.getDirectoryHandle(nm).then(function () { n++; return attempt(); }, function (e) {
+        if (e && e.name === "NotFoundError") return parent.getDirectoryHandle(nm, { create: true }).then(function (d) { return { dir: d, name: nm }; });
+        if (e && e.name === "TypeMismatchError") { n++; return attempt(); } /* 同じ名前のファイルがある */
+        throw e;
+      });
+    }
+    return attempt();
+  }
+  function writeFile(dir, name, bytes) {
+    return dir.getFileHandle(name, { create: true }).then(function (fh) { return fh.createWritable(); })
+      .then(function (w) { return w.write(bytes).then(function () { return w.close(); }); });
+  }
+  function saveToFolder() {
+    if (zipping) return;
+    var list = selectedParts();
+    if (!list.length) return;
+    zipping = true; saveMode = "dir"; zipLabel = "保存先を確認中…"; updateBar();
+    var failed = [], noCam = [], made = [], root = null;
+    getRoot().then(function (r) {
+      root = r;
+      var tasks = [], chain = Promise.resolve();
+      list.sort(function (a, b) { return procOrder(procOf(a)) - procOrder(procOf(b)) || stockDir(a).localeCompare(stockDir(b), "ja", { numeric: true }) || String(a.name).localeCompare(String(b.name), "ja"); })
+        .forEach(function (p) {
+          chain = chain.then(function () {
+            var path = [safe(projectName() || "プロジェクト"), safe(procInfo(procOf(p)).label)].concat(formOf(p) === "pipe" ? [] : [stockDir(p)]);
+            return path.reduce(function (pr, seg) {
+              return pr.then(function (d) { return d.getDirectoryHandle(seg, { create: true }); });
+            }, Promise.resolve(root)).then(function (parent) { return freshDir(parent, partDir(p)); }).then(function (pd) {
+              made.push(path.concat(pd.name).join("/"));
+              var files = camsOf(p.id), used = {};
+              if (!files.length) noCam.push(p.name);
+              files.forEach(function (c) {
+                var fn = uniqName(used, c.name);
+                tasks.push(function () {
+                  return fetchCamBytes(c).then(function (b) { return writeFile(pd.dir, fn, b); })
+                    .catch(function () { failed.push(p.name + "（" + c.name + "）"); });
+                });
+              });
+            });
+          });
+        });
+      return chain.then(function () {
+        zipLabel = "0/" + tasks.length + " 件保存中…"; updateBar();
+        return runPool(tasks, FETCH_PARALLEL, function (k, total) { zipLabel = k + "/" + total + " 件保存中…"; updateBar(); });
+      });
+    }).then(function () {
+      var m = "「" + root.name + "」に" + list.length + "点を保存しました（" + made.slice(0, 3).join("、") + (made.length > 3 ? " ほか" : "") + "）。";
+      if (failed.length) m += "取得できなかったファイル: " + failed.join("、") + "。";
+      if (noCam.length) m += "ファイルが無い部品: " + noCam.join("、") + "。";
+      showNotice(m, failed.length > 0);
+    }, function (e) {
+      if (e && e.name === "AbortError") return; /* 保存先を選ぶ画面で取り消した */
+      if (e && e.name === "NotFoundError") showNotice("保存先のフォルダが見つかりません。操作バーの「保存先 … 変更」から選び直してください。", true);
+      else handleErr(e, "フォルダに保存できませんでした。もう一度お試しください。");
+    }).then(function () { zipping = false; saveMode = ""; zipLabel = ""; updateBar(); });
   }
   /* ---------- 担当者（誰がやるか） ---------- */
   /* 担当の Slack 通知: 最後に「担当する」を押してから10秒たったら、まとめてすぐ送ってもらう（続けて担当した分は1通に） */
@@ -1655,9 +2056,16 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     $("ab-count").textContent = list.length + "点を選択中（計" + sumQty(list) + "個）";
     var others = othersIn(list).length;
     $("ab-detail").textContent = nGroups + "区画 · ファイル " + nCam + "件" + (noCam ? " · ファイルなし " + noCam + "点" : "") + (others ? " · 他の人の担当 " + others + "点" : "");
+    $("ab-dir").hidden = !CAN_DIR;
+    $("ab-dir").disabled = zipping;
+    $("ab-dir").textContent = zipping && saveMode === "dir" ? (zipLabel || "保存中…") : zipArmed === "dir" ? "他の人の担当を含みます。保存する？" : "フォルダに保存";
+    $("ab-dir").classList.toggle("armed", zipArmed === "dir" && !zipping);
+    $("ab-dest").hidden = !CAN_DIR;
+    $("ab-dest-name").textContent = saveRoot ? saveRoot.name : "未設定（初めて保存するときに選びます）";
+    $("ab-zip").classList.toggle("primary", !CAN_DIR);
     $("ab-zip").disabled = zipping;
-    $("ab-zip").textContent = zipping ? (zipLabel || "zipを作成中…") : zipArmed ? "他の人の担当を含みます。ダウンロードする？" : "ファイルをzipでダウンロード";
-    $("ab-zip").classList.toggle("armed", zipArmed && !zipping);
+    $("ab-zip").textContent = zipping && saveMode === "zip" ? (zipLabel || "zipを作成中…") : zipArmed === "zip" ? "他の人の担当を含みます。ダウンロードする？" : CAN_DIR ? "zipでダウンロード" : "ファイルをzipでダウンロード";
+    $("ab-zip").classList.toggle("armed", zipArmed === "zip" && !zipping);
     $("ab-done").disabled = marking;
     var toTake = list.filter(function (p) { return p.assignee !== me; }).length;
     $("ab-assign").hidden = !toTake;
@@ -1723,7 +2131,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     var c = thumbCache[p.id];
     if (!c || c.rev !== p.thumbRev) return h("span", { class: "p-thumb loading", "aria-hidden": "true" });
     if (!c.data) return null;
-    return h("img", { class: "p-thumb", src: c.data, alt: p.name + " の画像", title: "押すと大きく表示", onclick: function () { showThumb(p, c.data); } });
+    return h("img", { class: "p-thumb", src: c.data, alt: p.name + " の画像", title: "押すと大きく表示", onclick: function () { if (drawingsOf(p.id).length) openViewer(p); else showThumb(p, c.data); } });
   }
   function showThumb(p, data) {
     var d = $("thumb-dialog");
@@ -2009,7 +2417,8 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
             h("span", { class: "p-meta" },
               p.mechanism ? h("span", null, p.mechanism) : null,
               qtyBlock(p, off),
-              formOf(p) === "pipe" ? h("span", { class: "len" }, "L" + fmtT(p.length) + "mm") : null))),
+              formOf(p) === "pipe" ? h("span", { class: "len" }, "L" + fmtT(p.length) + "mm") : null,
+              drawingsOf(p.id).length ? h("button", { class: "draw-btn", type: "button", title: "添付の図面（PDF・画像）を大きく表示する", onclick: function () { openViewer(p); } }, "図面を見る") : null))),
         editPart[p.id] ? editBlock(p) : [
           sizeBlock(p, off),
           dueBlock(p, off),
@@ -2046,6 +2455,7 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
   var fieldsForm = ""; /* ③ の欄に入っている値がどの型のものか（型が変わったら消す） */
   var nameAuto = "";   /* ファイル名から自動で入れた部品名（手で書き換えたら上書きしない） */
   var formFiles = [];  /* ① で選んだファイル */
+  var formBatch = null; /* 複数のフォルダをまとめて追加するとき: [{ dir, dims, files }]（部品名・断面・長さはフォルダ名から） */
   function buildProcPick() {
     var box = $("f-proc-pick"); box.textContent = "";
     PROCESSES.forEach(function (x) {
@@ -2090,9 +2500,12 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     var sl = $("sec-list"); sl.textContent = "";
     unique(same.map(function (p) { return p.section || ""; })).sort(byJa).forEach(function (m) { sl.appendChild(h("option", { value: m })); });
   }
-  function setFormFiles(list) {
+  /* folder: フォルダから選んだとき { dir, dims }（dims はフォルダ名から読んだ角パイプの寸法。読めなければ null） */
+  function setFormFiles(list, folder) {
+    setBatch(null);
     formFiles = list.map(snapFile); /* 選んだ・ドラッグした瞬間に中身を読み込む（一時ファイルがすぐ消える場合があるため） */
     var ul = $("f-list"); ul.textContent = "";
+    if (folder) ul.appendChild(h("li", { class: "dir" }, "フォルダ「" + folder.dir + "」（" + list.length + "ファイル）"));
     list.forEach(function (f) {
       var ext = extOf(f.name);
       ul.appendChild(h("li", null, ext ? h("span", { class: "kind" }, ext) : null, h("span", { class: "fname" }, f.name), h("span", { class: "sz" }, fmtSize(f.size))));
@@ -2101,6 +2514,18 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     ul.hidden = !list.length;
     if (!list.length) return;
     var names = list.map(function (f) { return f.name; });
+    var nm = $("f-name");
+    if (folder) {
+      nameAuto = (folder.dims ? folder.dims.name : folder.dir).slice(0, 80);
+      nm.value = nameAuto;
+      if (folder.dims) {
+        /* フォルダ名から読めたら角パイプ（中の .cnc より優先）。肉厚・材質は前の値のまま */
+        chooseFormProc("pipe", false);
+        $("f-sec").value = folder.dims.section; $("f-len").value = fmtT(folder.dims.length);
+        formHint("フォルダ名から 角パイプ・□" + folder.dims.section + "・長さ" + fmtT(folder.dims.length) + "mm と読み取りました。肉厚・材質・数量を確かめてください。", false);
+        return;
+      }
+    }
     var inferred = inferProcess(names);
     if (inferred) {
       chooseFormProc(inferred, false);
@@ -2108,12 +2533,79 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     } else if (!formProc) {
       formHint("このファイルからは加工の種類が分かりません。上のボタンから選んでください。", true);
     }
-    var nm = $("f-name");
-    if (!nm.value.trim() || nm.value === nameAuto) {
+    if (!folder && (!nm.value.trim() || nm.value === nameAuto)) {
       nameAuto = names[0].replace(/\.[^.]+$/, "").slice(0, 80);
       nm.value = nameAuto;
     }
   }
+  function setBatch(b) {
+    formBatch = b;
+    $("add-form").classList.toggle("batch", !!b);
+  }
+  /* フォルダ（[{ dir, files }]）を選んだ・ドラッグしたとき。1つなら普段の追加と同じ、複数ならまとめて追加する */
+  function setFormFolders(folders) {
+    folders = folders.filter(function (f) { return f.files.length; });
+    if (!folders.length) { showNotice("フォルダの中にファイルがありませんでした。"); return; }
+    if (folders.length === 1) { setFormFiles(folders[0].files, { dir: folders[0].dir, dims: folderDims(folders[0].dir) }); return; }
+    var ok = folders.filter(function (f) { return folderDims(f.dir); });
+    var ng = folders.filter(function (f) { return !folderDims(f.dir); });
+    if (ng.length) showNotice("フォルダ名から寸法を読み取れなかったので外しました（1つずつ追加してください）: " + ng.map(function (f) { return f.dir; }).join("、"), true);
+    if (ok.length < 2) { if (ok.length) setFormFolders(ok); return; }
+    setFormFiles([]);
+    setBatch(ok.map(function (f) { return { dir: f.dir, dims: folderDims(f.dir), files: f.files.map(snapFile) }; }));
+    var ul = $("f-list"); ul.textContent = "";
+    formBatch.forEach(function (b) {
+      ul.appendChild(h("li", null, h("span", { class: "fname" }, b.dir), h("span", { class: "sz" }, "→ " + b.dims.name + "・□" + b.dims.section + "・L" + fmtT(b.dims.length) + "（" + b.files.length + "ファイル）")));
+    });
+    ul.appendChild(h("li", null, h("button", { class: "linkbtn", type: "button", onclick: function () { setFormFiles([]); } }, "選んだフォルダを外す")));
+    ul.hidden = false;
+    chooseFormProc("pipe", false);
+    formHint(ok.length + "個のフォルダを角パイプとして読み取りました。部品名・断面・長さはフォルダ名から入れます。肉厚・材質・数量（全部に共通）を入れてください。", false);
+  }
+  /* フォルダの中のファイルを集める。[{ segs: ["親", "子", "a.ipt"], file }] にして、部品ごとのフォルダに分ける */
+  var JUNK = /^(\.DS_Store|Thumbs\.db|desktop\.ini|~\$.*|\._.*)$/i;
+  function groupByPath(list) {
+    var by = {}, order = [], out = [];
+    list.forEach(function (x) {
+      var k = x.segs[0];
+      if (!by[k]) { by[k] = []; order.push(k); }
+      by[k].push({ segs: x.segs.slice(1), file: x.file });
+    });
+    order.forEach(function (k) {
+      var sub = by[k];
+      /* 中にファイルが無く、フォルダだけなら、その中のフォルダを1つずつ部品にする（まとめたフォルダを選んだとき） */
+      if (sub.every(function (x) { return x.segs.length > 1; })) out = out.concat(groupByPath(sub));
+      else out.push({ dir: k, files: sub.map(function (x) { return x.file; }) });
+    });
+    return out;
+  }
+  function foldersFromPaths(list) {
+    list = list.filter(function (x) { return !JUNK.test(x.file.name); });
+    var loose = list.filter(function (x) { return x.segs.length < 2; }).length;
+    if (loose) showNotice("フォルダと一緒に選んだファイル" + loose + "件は外しました。ファイルは別に追加してください。");
+    return groupByPath(list.filter(function (x) { return x.segs.length >= 2; }));
+  }
+  function walkEntry(en, prefix) {
+    var segs = prefix.concat(en.name);
+    if (en.isFile) return new Promise(function (resolve, reject) { en.file(function (f) { resolve([{ segs: segs, file: f }]); }, reject); });
+    var reader = en.createReader(), all = [];
+    return new Promise(function (resolve, reject) {
+      (function next() {
+        reader.readEntries(function (batch) {
+          if (!batch.length) { resolve(all); return; }
+          all = all.concat(Array.prototype.slice.call(batch)); next();
+        }, reject);
+      })();
+    }).then(function (children) {
+      return Promise.all(children.map(function (c) { return walkEntry(c, segs); }));
+    }).then(function (arrs) { return [].concat.apply([], arrs); });
+  }
+  $("f-dir-btn").addEventListener("click", function () { $("f-dir").click(); });
+  $("f-dir").addEventListener("change", function () {
+    var list = Array.prototype.map.call(this.files || [], function (f) { return { segs: String(f.webkitRelativePath || f.name).split("/"), file: f }; });
+    this.value = "";
+    if (list.length) setFormFolders(foldersFromPaths(list));
+  });
   $("f-files").addEventListener("change", function () { setFormFiles(Array.prototype.slice.call(this.files || [])); });
   (function () {
     var dz = $("f-drop"), depth = 0;
@@ -2123,6 +2615,15 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     dz.addEventListener("dragleave", function () { if (--depth <= 0) { depth = 0; dz.classList.remove("dragging"); } });
     dz.addEventListener("drop", function (e) {
       e.preventDefault(); depth = 0; dz.classList.remove("dragging");
+      /* フォルダが含まれていれば、中のファイルを読む（items はこのイベントの中でしか読めないので先に取り出す） */
+      var items = (e.dataTransfer && e.dataTransfer.items) || [], entries = [];
+      for (var i = 0; i < items.length; i++) { var en = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry(); if (en) entries.push(en); }
+      if (entries.some(function (en) { return en.isDirectory; })) {
+        Promise.all(entries.map(function (en) { return walkEntry(en, []); })).then(function (arrs) {
+          setFormFolders(foldersFromPaths([].concat.apply([], arrs)));
+        }, function () { showNotice("フォルダを読み込めませんでした。もう一度ドラッグするか、「フォルダを選ぶ」から選んでください。", true); });
+        return;
+      }
       var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
       if (fs.length) setFormFiles(fs);
     });
@@ -2262,20 +2763,27 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
   $("mech-filter").addEventListener("change", function (e) { mechFilter = e.target.value; render(); });
   $("who-filter").addEventListener("change", function (e) { whoFilter = e.target.value; render(); });
   /* 他の人が担当している部品が含まれていたら、ひとこと断ってから（2回押しで）ダウンロードする */
-  $("ab-zip").addEventListener("click", function () {
+  function guardOthers(kind, run) {
     if (zipping) return;
     var others = othersIn(selectedParts());
-    if (others.length && !zipArmed) {
-      zipArmed = true;
+    if (others.length && zipArmed !== kind) {
+      zipArmed = kind;
       showNotice("他の人が担当している部品が含まれています: " + others.map(function (p) { return "「" + p.name + "」（" + p.assignee + "）"; }).join("、") +
         "。加工がかぶらないよう、担当の人に声をかけてからダウンロードしてください。");
       clearTimeout(zipArmTimer);
-      zipArmTimer = setTimeout(function () { zipArmed = false; updateBar(); }, 3500);
+      zipArmTimer = setTimeout(function () { zipArmed = ""; updateBar(); }, 3500);
       updateBar();
       return;
     }
-    clearTimeout(zipArmTimer); zipArmed = false;
-    zipSelected();
+    clearTimeout(zipArmTimer); zipArmed = "";
+    run();
+  }
+  $("ab-zip").addEventListener("click", function () { guardOthers("zip", zipSelected); });
+  $("ab-dir").addEventListener("click", function () { guardOthers("dir", saveToFolder); });
+  $("ab-dest-change").addEventListener("click", function () {
+    pickRoot().then(function (hd) { showNotice("保存先を「" + hd.name + "」にしました。"); }, function (e) {
+      if (!e || e.name !== "AbortError") showNotice("保存先を選べませんでした: " + errText(e));
+    });
   });
   $("ab-clear").addEventListener("click", function () { sel.clear(); render(); });
   twoStep($("ab-assign"), "担当する", function () {
@@ -2373,25 +2881,30 @@ header h1.brand .h1-sub { margin: 0 0 3px; }
     if (!projectId) { say(msg, "プロジェクトを選んでください。", true); return; }
     if (!formProc) { say(msg, "加工の種類を選んでください。", true); formHint("加工の種類を選んでください。", true); return; }
     var form = procInfo(formProc).form;
-    var name = $("f-name").value.trim();
-    var t = parseFloat($("f-t").value), len = parseFloat($("f-len").value), sec = $("f-sec").value.trim();
+    var t = parseFloat($("f-t").value);
     var qty = Number($("f-qty").value);
-    if (form === "pipe" && !sec) { say(msg, "断面を入力してください（例: 20×20）。", true); $("f-sec").focus(); return; }
+    if (formBatch && form !== "pipe") { say(msg, "複数のフォルダをまとめて追加できるのは角パイプだけです。加工の種類を角パイプにするか、フォルダを1つずつ追加してください。", true); return; }
+    /* 部品ごとの値（まとめて追加するときはフォルダ名から） */
+    var items = formBatch ? formBatch.map(function (b) { return { name: b.dims.name, sec: b.dims.section, len: b.dims.length, files: b.files }; })
+      : [{ name: $("f-name").value.trim(), sec: $("f-sec").value.trim(), len: parseFloat($("f-len").value), files: formFiles.slice() }];
+    var one = items[0];
+    if (form === "pipe" && !one.sec) { say(msg, "断面を入力してください（例: 20×20）。", true); $("f-sec").focus(); return; }
     if (form !== "print" && !(t > 0 && t <= 200)) { say(msg, (form === "pipe" ? "肉厚" : "板厚") + "は0より大きい数値（mm）で入力してください。", true); $("f-t").focus(); return; }
-    if (form === "pipe" && !(len > 0 && len <= 10000)) { say(msg, "長さは0より大きい数値（mm）で入力してください。", true); $("f-len").focus(); return; }
+    if (form === "pipe" && !items.every(function (x) { return x.len > 0 && x.len <= 10000; })) { say(msg, "長さは0より大きく10000以下の数値（mm）で入力してください。", true); if (!formBatch) $("f-len").focus(); return; }
     if (!(Number.isInteger(qty) && qty >= 1 && qty <= 999)) { say(msg, "数量は1〜999の整数で入力してください。", true); $("f-qty").focus(); return; }
-    if (!name) { say(msg, "部品名を入力してください。", true); $("f-name").focus(); return; }
-    var big = formFiles.filter(function (f) { return f.size > MAX_BYTES; });
+    if (!one.name) { say(msg, "部品名を入力してください。", true); $("f-name").focus(); return; }
+    var big = [].concat.apply([], items.map(function (x) { return x.files; })).filter(function (f) { return f.size > MAX_BYTES; });
     if (big.length) { say(msg, "ファイルが大きすぎます（1ファイル20MBまで）: " + big.map(function (f) { return f.name; }).join("、"), true); return; }
-    var fs = formFiles.slice(); /* 中身は選んだときに読み込み済み */
-    enqueueAdd({
-      projectId: projectId, process: formProc, name: name,
-      thickness: form === "print" ? null : Math.round(t * 1000) / 1000,
-      section: form === "pipe" ? sec : "", length: form === "pipe" ? Math.round(len * 10) / 10 : null,
-      material: $("f-mat").value.trim(), qty: qty, mechanism: $("f-mech").value.trim(), note: $("f-note").value.trim(),
-      due: $("f-due").value || "",
-      sizeText: form === "pipe" ? "" : $("f-size").value.trim()
-    }, fs);
+    items.forEach(function (x) { /* 中身は選んだときに読み込み済み */
+      enqueueAdd({
+        projectId: projectId, process: formProc, name: x.name,
+        thickness: form === "print" ? null : Math.round(t * 1000) / 1000,
+        section: form === "pipe" ? x.sec : "", length: form === "pipe" ? Math.round(x.len * 10) / 10 : null,
+        material: $("f-mat").value.trim(), qty: qty, mechanism: $("f-mech").value.trim(), note: $("f-note").value.trim(),
+        due: $("f-due").value || "",
+        sizeText: form === "pipe" ? "" : $("f-size").value.trim()
+      }, x.files);
+    });
     /* 次の部品へ: ファイル・部品名・数量・備考は空に、加工の種類は選び直し（ファイルから自動で判定するため）。
        板厚・材質・機構などは続けて同じものを使うことが多いので残す */
     say(msg, "");
